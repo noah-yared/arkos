@@ -37,6 +37,7 @@ class Agent:
         self.flow = flow
         self.memory = memory
         self.llm = llm
+        self.tool_manager = tool_manager
         self.current_state = self.flow.get_initial_state()
         self.system_prompt=None
 
