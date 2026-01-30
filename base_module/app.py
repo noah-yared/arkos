@@ -52,16 +52,55 @@ agent = Agent(
     tool_manager=tool_manager,
 )
 
+def format_tools_for_system_prompt(tools: dict) -> str:
+    """
+    tools: {tool_name: ToolDefinition}
+    ToolDefinition is whatever MCPToolManager.list_all_tools() returns.
+    """
+    lines = []
+    lines.append("You have access to the following tools.")
+    lines.append("Use them when appropriate. Only call tools that are listed below.")
+    lines.append("")
+
+    for name, tool in tools.items():
+        lines.append(f"Tool name: {name}")
+        if getattr(tool, "description", None):
+            lines.append(f"Description: {tool.description}")
+        if getattr(tool, "input_schema", None):
+            lines.append("Input schema:")
+            lines.append(str(tool.input_schema))
+        lines.append("")
+
+    return "\n".join(lines)
 
 @app.on_event("startup")
 async def startup():
+        
+    base_system_prompt = (config.get("app.system_prompt") or "").strip()
+
+    system_prompt=None
+
     if tool_manager:
         await tool_manager.initialize_servers()
+
         print(f"Initialized {len(tool_manager.clients)} MCP servers")
         # Cache tools on agent
         agent.available_tools = await tool_manager.list_all_tools()
         print(f"Initialized {len(tool_manager.clients)} MCP servers")
         print(f"Available tools: {list(agent.available_tools.keys())}")
+
+
+        tool_prompt = format_tools_for_system_prompt(agent.available_tools)
+
+        agent.system_prompt = (
+            base_system_prompt + "\n\n" + tool_prompt
+            if base_system_prompt
+            else tool_prompt
+        )
+    else:
+        agent.system_prompt = base_system_prompt
+
+            
 
 
 @app.get("/health")
@@ -95,8 +134,10 @@ async def chat_completions(request: Request):
     user_id = request.headers.get("X-User-ID") or payload.get("user") or payload.get("user_id")
 
     context_msgs = []
+    
+    context_msgs.append(SystemMessage(content=agent.system_prompt))
 
-    context_msgs.append(SystemMessage(content=config.get("app.system_prompt")))
+    print(agent.system_prompt)
 
     # Convert OAI messages into internal message objects
     for msg in messages:
