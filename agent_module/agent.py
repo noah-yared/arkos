@@ -1,15 +1,16 @@
-    # agent.py
+# agent.py
 
 import os
 import sys
 from pydantic import create_model, Field
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import json
 from enum import Enum
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from state_module.state_handler import StateHandler
+
 # Assuming ArkModelLink.generate_response is actually ArkModelLink.agenerate_response
 from model_module.ArkModelNew import ArkModelLink, AIMessage, SystemMessage
 from memory_module.memory import Memory
@@ -25,7 +26,12 @@ class Agent:
     """
 
     def __init__(
-        self, agent_id: str, flow: StateHandler, memory: Memory, llm: ArkModelLink
+        self,
+        agent_id: str,
+        flow: StateHandler,
+        memory: Memory,
+        llm: ArkModelLink,
+        tool_manager=None,
     ):
         self.agent_id = agent_id
         self.flow = flow
@@ -36,6 +42,8 @@ class Agent:
         self.startup_flag = True
         self.tools = []
         self.tool_names = []
+        self.available_tools = {}
+        self.current_user_id = None  # Set per-request for per-user tool auth
 
     # def bind_tool(self, tool):
     #
@@ -46,6 +54,48 @@ class Agent:
     #    tool_name = tool.tool
     #    self.bind_tool(tool)
     #    self.tool_names.append(tool_name)
+
+    def fill_tool_args_class(self, tool_name: str, tool_args: Dict[str, Any]):
+        """
+        Returns a Pydantic object whose .model_dump() is:
+          {"tool_name": <tool_name>, "tool_args": <tool_args>}
+        """
+
+        ToolCall = create_model(
+            "ToolCall",
+            tool_name=(str, Field(description="Tool name to execute")),
+            tool_args=(
+                Dict[str, Any],
+                Field(default_factory=dict, description="Tool args"),
+            ),
+        )
+
+        return ToolCall(tool_name=tool_name, tool_args=tool_args)
+
+    async def create_tool_option_class(self):
+        """
+        Returns a Pydantic model class with a single field 'tool_name',
+        whose value must be one of the available tool IDs.
+        """
+
+        server_tool_map = await self.tool_manager.list_all_tools()
+
+        enum_members = {}
+        for server_name in server_tool_map:
+            for tool_name in server_tool_map[server_name]:
+                enum_members[tool_name] = tool_name
+
+        ToolEnum = Enum("ToolEnum", enum_members)
+
+        ToolOptionsModel = create_model(
+            "ToolCall",
+            tool_name=(
+                ToolEnum,
+                Field(description="The name of the tool to execute next"),
+            ),
+        )
+
+        return ToolOptionsModel
 
     def create_next_state_class(self, options: List[Tuple[str, str]]):
         """
@@ -95,10 +145,8 @@ class Agent:
         """
 
         transition_tuples = list(zip(transitions_dict["tt"], transitions_dict["td"]))
-        prompt = f"""given the context of the conversation and the following state options {transition_tuples} output the most reasonable next state. 
+        prompt = f"""given the context of the conversation and the following state options {transition_tuples} output the most reasonable next state.
                  do not use tool result to determine the next state"""
-
-
 
         # creates pydantic class and a model dump
         NextStates = self.create_next_state_class(transition_tuples)
@@ -112,12 +160,9 @@ class Agent:
 
         context_text = [SystemMessage(content=prompt)] + messages
 
-        
         output = await self.call_llm(context=context_text, json_schema=json_schema)
 
-        
         structured_output = json.loads(output.content)
-        
 
         next_state_name = structured_output["next_state"]
 
@@ -155,11 +200,20 @@ class Agent:
 
         return output
 
-    async def step(self, messages):
+    async def step(self, messages, user_id: str = None):
         """
         Runs the agent until reaching a terminal state or completion.
         Returns the last AIMessage produced.
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to process
+        user_id : str, optional
+            User ID for per-user tool authentication
         """
+        # Set current user for per-user tool auth
+        self.current_user_id = user_id
 
         # agent.context["messages"].extend(messages)
 
@@ -210,7 +264,6 @@ class Agent:
 
             messages_list = self.memory.retrieve_short_memory(5)
             if self.current_state.check_transition_ready(messages_list):
-
                 transition_dict = self.flow.get_transitions(
                     self.current_state, messages_list
                 )
@@ -219,14 +272,12 @@ class Agent:
                 if len(transition_names) == 1:
                     next_state_name = transition_names[0]
                 else:
-                    # 🟢 FIX 4: Add 'await' to call the async choose_transition method
                     next_state_name = await self.choose_transition(
                         transition_dict, messages_list
                     )
 
                 self.current_state = self.flow.get_state(next_state_name)
                 print("agent.py CURR STATE: ", self.current_state)
-
 
             else:
                 print("REACHED NO NEXT STATE")
@@ -238,4 +289,3 @@ class Agent:
 
 if __name__ == "__main__":
     pass
-
