@@ -36,22 +36,24 @@ state:
   graph_path: "state_module/state_graph.yaml"
 
 mcp_servers:
-    brave-search:
-      command: npx
-      args: ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"]
-      env:
-        BRAVE_API_KEY: "${BRAVE_API_KEY}"
+  brave-search:
+    transport: stdio
+    command: npx
+    args: ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"]#   
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
 
-        # google-calendar:
-        #   command: npx
-        #   args: ["@cocal/google-calendar-mcp"]
-        #   env:
-        #     GOOGLE_OAUTH_CREDENTIALS: "${GOOGLE_OAUTH_CREDENTIALS}"
-        #     GOOGLE_CALENDAR_MCP_TOKEN_PATH: "${GOOGLE_CALENDAR_MCP_TOKEN_PATH}"
+  google-calendar:
+    transport: stdio
+    command: npx
+    args: ["-y", "@cocal/google-calendar-mcp"]
+    env:
+      GOOGLE_OAUTH_CREDENTIALS: "${GOOGLE_OAUTH_CREDENTIALS}"
 
-        # filesystem:
-        #   command: npx
-        #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+  filesystem:
+    transport: stdio
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
 
 
 

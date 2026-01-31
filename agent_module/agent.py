@@ -43,6 +43,7 @@ class Agent:
         self.tools = []
         self.tool_names = []
         self.available_tools = {}
+        self.current_user_id = None  # Set per-request for per-user tool auth
 
     # def bind_tool(self, tool):
     #
@@ -54,7 +55,6 @@ class Agent:
     #    self.bind_tool(tool)
     #    self.tool_names.append(tool_name)
 
-  
     def fill_tool_args_class(self, tool_name: str, tool_args: Dict[str, Any]):
         """
         Returns a Pydantic object whose .model_dump() is:
@@ -64,36 +64,39 @@ class Agent:
         ToolCall = create_model(
             "ToolCall",
             tool_name=(str, Field(description="Tool name to execute")),
-            tool_args=(Dict[str, Any], Field(default_factory=dict, description="Tool args")),
+            tool_args=(
+                Dict[str, Any],
+                Field(default_factory=dict, description="Tool args"),
+            ),
         )
 
         return ToolCall(tool_name=tool_name, tool_args=tool_args)
 
-    def create_tool_option_class(self):
+    async def create_tool_option_class(self):
         """
         Returns a Pydantic model class with a single field 'tool_name',
         whose value must be one of the available tool IDs.
         """
 
-
-        server_tool_map = self.tool_manager.list_all_tools()
-
+        server_tool_map = await self.tool_manager.list_all_tools()
 
         enum_members = {}
-        for server_name in server_tool_map: 
+        for server_name in server_tool_map:
             for tool_name in server_tool_map[server_name]:
-
                 enum_members[tool_name] = tool_name
 
         ToolEnum = Enum("ToolEnum", enum_members)
 
         ToolOptionsModel = create_model(
             "ToolCall",
-            tool_name=(ToolEnum, Field(description="The name of the tool to execute next")),
+            tool_name=(
+                ToolEnum,
+                Field(description="The name of the tool to execute next"),
+            ),
         )
 
         return ToolOptionsModel
-       
+
     def create_next_state_class(self, options: List[Tuple[str, str]]):
         """
         options: list of tuples (next_state, description of state)
@@ -142,7 +145,7 @@ class Agent:
         """
 
         transition_tuples = list(zip(transitions_dict["tt"], transitions_dict["td"]))
-        prompt = f"""given the context of the conversation and the following state options {transition_tuples} output the most reasonable next state. 
+        prompt = f"""given the context of the conversation and the following state options {transition_tuples} output the most reasonable next state.
                  do not use tool result to determine the next state"""
 
         # creates pydantic class and a model dump
@@ -197,11 +200,20 @@ class Agent:
 
         return output
 
-    async def step(self, messages):
+    async def step(self, messages, user_id: str = None):
         """
         Runs the agent until reaching a terminal state or completion.
         Returns the last AIMessage produced.
+
+        Parameters
+        ----------
+        messages : list
+            List of messages to process
+        user_id : str, optional
+            User ID for per-user tool authentication
         """
+        # Set current user for per-user tool auth
+        self.current_user_id = user_id
 
         # agent.context["messages"].extend(messages)
 
