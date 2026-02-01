@@ -33,6 +33,7 @@ memory = Memory(
     user_id=config.get("memory.user_id"),
     session_id=None,
     db_url=config.get("database.url"),
+    use_long_term=config.get("memory.use_long_term", False),  # Disabled for speed
 )
 
 # Default system prompt for the agent

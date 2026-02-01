@@ -25,8 +25,9 @@ database:
 
 memory:
   user_id: "ark-agent"        
-  short_term_turns: 5
-  long_term_limit: 50  
+  short_term_turns: 50
+  long_term_limit: 5
+  use_long_term: true
 
 embedding:
   base_url: "http://localhost:4444/v1"
