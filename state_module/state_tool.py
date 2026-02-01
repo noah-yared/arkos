@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -25,26 +26,47 @@ class StateTool(State):
     async def choose_tool(self, context, agent):
         """
         Chooses tool to use based on the context and server
-
-
         """
 
         prompt = "based on the above user request, choose the tool which best satisfies the users request"
         instructions = context + [SystemMessage(content=prompt)]
 
+        # Get Pydantic class and convert to JSON schema format
         tool_option_class = await agent.create_tool_option_class()
-        tool_name = await agent.call_llm(context, tool_option_class)
+        json_schema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "tool_choice",
+                "schema": tool_option_class.model_json_schema(),
+            },
+        }
+
+        # Call LLM and parse response
+        output = await agent.call_llm(instructions, json_schema)
+        structured_output = json.loads(output.content)
+        tool_name = structured_output["tool_name"]
 
         server_name = agent.tool_manager._tool_registry[tool_name]
 
         all_tools = await agent.tool_manager.list_all_tools()
-        tool_args = all_tools[server_name][tool_name]
+        tool_spec = all_tools[server_name][tool_name]
 
-        fill_tool_args_class = agent.fill_tool_args_class(tool_name, tool_args)
+        # Build schema for tool arguments
+        tool_args_schema = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "tool_args",
+                "schema": tool_spec.get("inputSchema", {}),
+            },
+        }
 
-        tool_call = await agent.call_llm(context, fill_tool_args_class)
+        args_prompt = f"Fill in the arguments for the tool '{tool_name}' based on the user's request."
+        args_context = context + [SystemMessage(content=args_prompt)]
 
-        return tool_call
+        args_output = await agent.call_llm(args_context, tool_args_schema)
+        tool_args = json.loads(args_output.content)
+
+        return {"tool_name": tool_name, "tool_args": tool_args}
 
     async def execute_tool(self, tool_call, agent):
         """

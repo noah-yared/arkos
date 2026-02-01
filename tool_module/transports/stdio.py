@@ -89,7 +89,17 @@ class StdioTransport(MCPTransport):
         # Read response from stdout
         response_line = await self.process.stdout.readline()
         if not response_line:
-            raise RuntimeError("STDIO server closed connection")
+            # Capture stderr to show actual error
+            stderr_output = ""
+            if self.process.stderr:
+                try:
+                    stderr_output = (await self.process.stderr.read()).decode()
+                except Exception:
+                    pass
+            error_msg = "STDIO server closed connection"
+            if stderr_output:
+                error_msg += f"\nServer stderr: {stderr_output}"
+            raise RuntimeError(error_msg)
 
         response = json.loads(response_line.decode())
         logger.debug(f"STDIO << {json.dumps(response)}")
