@@ -172,3 +172,32 @@ class ArkModelLink(BaseModel):
 
         # The response is the string content (either regular text or a JSON string)
         return response_content
+
+    def _format_messages(self, messages: List[Message]) -> List[Dict[str, str]]:
+        """Convert Message objects to OpenAI format."""
+        formatted = []
+        for msg in messages:
+            if isinstance(msg, (UserMessage, SystemMessage, ToolMessage)):
+                formatted.append({"role": msg.role, "content": msg.content or ""})
+            elif isinstance(msg, AIMessage):
+                formatted.append({"role": "assistant", "content": msg.content or ""})
+        return formatted
+
+    async def generate_stream(self, messages: List[Message]) -> AsyncIterator[str]:
+        """Stream tokens as they're generated."""
+        openai_messages = self._format_messages(messages)
+
+        try:
+            stream = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=openai_messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                stream=True,
+            )
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            print(f"Error during streaming: {e}")
+            yield f"Error: {e}"

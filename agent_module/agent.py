@@ -288,6 +288,90 @@ class Agent:
         self.current_state = self.flow.get_state("agent_reply")
         return last_ai_message
 
+    async def step_stream(self, messages, user_id: str = None):
+        """
+        Streaming version of step. Runs full state machine, streams output at state boundaries.
+
+        Yields:
+            str: Characters/chunks from each state's output
+        """
+        self.current_user_id = user_id
+        self.add_context(messages)
+
+        print("agent.py [STREAM] received message")
+        print("agent.py [STREAM] CURR STATE:", self.current_state)
+        print("agent.py [STREAM] IS TERMINAL?:", self.current_state.is_terminal)
+
+        retry_count = 0
+
+        while not self.current_state.is_terminal:
+            print(f"agent.py [STREAM] Inner loop - State: {self.current_state.name}")
+
+            if retry_count > MAX_ITER:
+                print("agent.py [STREAM] MAX ITER REACHED")
+                yield "\n[Max iterations reached]"
+                break
+            retry_count += 1
+
+            context = self.get_context()
+
+            # Run the state normally (same as non-streaming step)
+            try:
+                update = await self.current_state.run(context, self)
+                print(f"agent.py [STREAM] State returned: {type(update).__name__}")
+            except Exception as e:
+                print(f"agent.py [STREAM] State error: {e}")
+                update = AIMessage(content=f"Error: {str(e)[:200]}")
+                self.current_state = self.flow.get_state("agent_reply")
+
+            # Stream the state's output character by character
+            if update and hasattr(update, 'content') and update.content:
+                self.add_context([update])
+                print(f"agent.py [STREAM] Streaming {len(update.content)} chars")
+
+                # Stream character by character for smooth output
+                for char in update.content:
+                    yield char
+
+                if isinstance(update, AIMessage):
+                    print("agent.py [STREAM] AIMessage streamed")
+
+            # Check terminal
+            if self.current_state.is_terminal:
+                print("agent.py [STREAM] REACHED TERMINAL")
+                break
+
+            # Handle state transition (same logic as non-streaming step)
+            messages_list = self.memory.retrieve_short_memory(5)
+            if self.current_state.check_transition_ready(messages_list):
+                transition_dict = self.flow.get_transitions(
+                    self.current_state, messages_list
+                )
+                transition_names = transition_dict["tt"]
+                print(f"agent.py [STREAM] Transitions: {transition_names}")
+
+                if len(transition_names) == 1:
+                    next_state_name = transition_names[0]
+                else:
+                    next_state_name = await self.choose_transition(
+                        transition_dict, messages_list
+                    )
+
+                print(f"agent.py [STREAM] -> {next_state_name}")
+                self.current_state = self.flow.get_state(next_state_name)
+
+                # Separator between states (if continuing)
+                if not self.current_state.is_terminal:
+                    yield "\n\n"
+            else:
+                print("agent.py [STREAM] No transition ready")
+                break
+
+        print("agent.py [STREAM] Complete")
+        self.current_state = self.flow.get_state("agent_reply")
+
+        self.current_state = self.flow.get_state("agent_reply")
+
 
 if __name__ == "__main__":
     pass

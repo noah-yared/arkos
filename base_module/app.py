@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
 import time
 import uuid
 import os
 import sys
+import json
 
 # Standard boilerplate for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -123,63 +124,81 @@ async def health_check():
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     """OAI-compatible endpoint wrapping the full ArkOS agent."""
-    # Awaiting request.json() is correct for FastAPI's async handling of the request body
     payload = await request.json()
 
     messages = payload.get("messages", [])
     model = payload.get("model", "ark-agent")
-    response_format = payload.get("response_format")
+    stream = payload.get("stream", False)
 
     # Extract user_id from header or body for per-user tool auth
     user_id = request.headers.get("X-User-ID") or payload.get("user") or payload.get("user_id")
 
     context_msgs = []
-    
     context_msgs.append(SystemMessage(content=agent.system_prompt))
-
-    print(agent.system_prompt)
 
     # Convert OAI messages into internal message objects
     for msg in messages:
         role = msg["role"]
         content = msg["content"]
-        # Handling for tool calls, which is often crucial in OAI-compatible APIs
-        # if role == "tool" and msg.get("tool_call_id"):
-        #     context_msgs.append(ToolMessage(content=content, tool_call_id=msg["tool_call_id"]))
-        # elif role == "assistant" and msg.get("tool_calls"):
-        #     context_msgs.append(AIMessage(content=content, tool_calls=msg["tool_calls"]))
-        # else:
         if role == "system":
             context_msgs.append(SystemMessage(content=content))
         elif role == "user":
             context_msgs.append(UserMessage(content=content))
         elif role == "assistant":
-            # Assuming a simple assistant message here for brevity
             context_msgs.append(AIMessage(content=content))
-        # Note: You may need to refine the message parsing logic to correctly handle
-        # tool_calls and tool_messages if your agent uses them heavily.
 
-    # *** THE CRITICAL CHANGE: AWAIT the agent's step method ***
-    # This prevents the 'coroutine' object has no attribute 'content' error.
+    # Handle streaming
+    if stream:
+        async def generate_stream():
+            chunk_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+            async for chunk in agent.step_stream(context_msgs, user_id=user_id):
+                data = {
+                    "id": chunk_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": chunk},
+                        "finish_reason": None,
+                    }],
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+
+            # Send final chunk
+            final_data = {
+                "id": chunk_id,
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": "stop",
+                }],
+            }
+            yield f"data: {json.dumps(final_data)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+        )
+
+    # Non-streaming response
     agent_response = await agent.step(context_msgs, user_id=user_id)
-
-    # Handle the case where the agent might return None (though it should return an AIMessage)
     final_msg = agent_response or AIMessage(content="(no response)")
 
-    # Format as OpenAI chat completion response
     completion = {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
-        "choices": [
-            {
-                "index": 0,
-                # Now final_msg is guaranteed to be an AIMessage object (or placeholder)
-                "message": {"role": "assistant", "content": final_msg.content},
-                "finish_reason": "stop",
-            }
-        ],
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": final_msg.content},
+            "finish_reason": "stop",
+        }],
     }
 
     return JSONResponse(content=completion)
