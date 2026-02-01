@@ -65,6 +65,7 @@ class StateAI(State):
             content=(
                 "You are the agent reasoning state.\n"
                 "No tools are available.\n"
+                "Never repeat yourself \n"
                 "Produce a JSON object matching the provided schema.\n"
                 "Do not reveal chain-of-thought.\n"
                 "Use concise, high-level reasoning steps only.\n"

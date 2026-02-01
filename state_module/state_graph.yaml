@@ -16,7 +16,7 @@ states:
     description: "state used for your reasoning"
     type: agent
     transition:
-      next: [agent_reply, ask_user, use_tool]
+      next: [ask_user, use_tool]
 
 
       # cal_tool:
