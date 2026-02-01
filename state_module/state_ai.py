@@ -73,23 +73,43 @@ class StateAI(State):
 
         llm_context = [system] + messages
         output = await agent.call_llm(context=llm_context, json_schema=json_schema)
-        print("Reasoned Output: \n\n", output )
+        print("Reasoned Output: \n\n", output)
+
+        # Handle None or empty content
+        if not output or not output.content:
+            return AIMessage(content="I encountered an issue processing your request. Please try again.")
+
+        try:
+            data = ReasonedOutput.model_validate_json(output.content)
+        except Exception as e:
+            # If JSON parsing fails, return the raw content as fallback
+            print(f"Failed to parse structured output: {e}")
+            return AIMessage(content=output.content)
 
 
-        
-        data = ReasonedOutput.model_validate_json(output.content)
 
 
 
 
+        # Build response including the approach/reasoning
+        response_parts = []
 
+        # Include approach if it has substantive content
+        if data.approach:
+            for step in data.approach:
+                response_parts.append(f"• {step}")
 
-        if data.needs_clarification:
-            if not data.clarifying_question:
-                raise ValueError("needs_clarification=True but no clarifying_question provided")
-            # Include reasoning context with the clarifying question
-            response = data.final + "\n\n" + data.clarifying_question if data.final else data.clarifying_question
-            return AIMessage(content=response)
+        # Add final answer
+        if data.final:
+            if response_parts:
+                response_parts.append("")  # blank line
+            response_parts.append(data.final)
 
-        return AIMessage(content=data.final)
+        # Add clarifying question if needed
+        if data.needs_clarification and data.clarifying_question:
+            response_parts.append("")
+            response_parts.append(data.clarifying_question)
+
+        response = "\n".join(response_parts) if response_parts else data.final
+        return AIMessage(content=response)
 
