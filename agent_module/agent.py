@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from pydantic import create_model, Field
 from typing import List, Tuple, Dict, Any
 import json
@@ -182,25 +183,20 @@ class Agent:
 
         return None
 
-    def get_context(self, turns=5):
+    def get_context(self, turns=5, include_long_term=True):
         """
-
-        wrap long term and short term into context window
+        Wrap long term and short term into context window.
         output: list of messages
-
         """
-
         short_term_mem = self.memory.retrieve_short_memory(turns)
 
-        long_term_mem = self.memory.retrieve_long_memory(context=short_term_mem)
+        if include_long_term:
+            long_term_mem = self.memory.retrieve_long_memory(context=short_term_mem)
+            # Only include if it has content
+            if long_term_mem and long_term_mem.content.strip():
+                return [long_term_mem] + short_term_mem
 
-        # output = {"relevant_memories": long_term_mem,
-        #           "conversation_history": short_term_mem,
-        # }
-
-        output = [long_term_mem] + short_term_mem
-
-        return output
+        return short_term_mem
 
     async def step(self, messages, user_id: str = None):
         """
@@ -214,44 +210,39 @@ class Agent:
         user_id : str, optional
             User ID for per-user tool authentication
         """
+        step_start = time.time()
+
         # Set current user for per-user tool auth
         self.current_user_id = user_id
 
-        # agent.context["messages"].extend(messages)
-
-        ## process messages
-
+        t0 = time.time()
         self.add_context(messages)
+        print(f"[TIMING] add_context: {time.time() - t0:.3f}s")
 
-        print("agent.py recieved message")
-
-        # messages_list = self.context.get("messages", [])
-        # messages_list = self.memory.retrieve_memory()
-        # if not self.current_state:
-        #    print("GETTINT INITIAL")
-        #    self.current_state = self.flow.get_initial_state()
+        print("agent.py received message")
 
         last_ai_message = None
-
         retry_count = 0
         print("agent.py CURR STATE: ", self.current_state)
         print("agent.py IS TERMINAL?:", self.current_state.is_terminal)
 
         while not self.current_state.is_terminal:
-            print("Inner loop")
-            ### DEBUGGING
+            loop_start = time.time()
+            print(f"Inner loop #{retry_count + 1}")
 
             if retry_count > MAX_ITER:
                 print("MAX ITER REACHED")
                 break
             retry_count += 1
 
-            ### DEBUGGING
-            # print("MSGS_LIST", messages_list[-1])
-
+            t0 = time.time()
             context = self.get_context()
+            print(f"[TIMING] get_context: {time.time() - t0:.3f}s")
+
+            t0 = time.time()
             update = await self.current_state.run(context, self)
-            print("inner_loop_update: ", update)
+            print(f"[TIMING] state.run: {time.time() - t0:.3f}s")
+            print(f"[TIMING] loop total: {time.time() - loop_start:.3f}s")
             if update:
                 # messages_list.append(update)
                 update_list = [update]
@@ -284,6 +275,8 @@ class Agent:
             else:
                 print("REACHED NO NEXT STATE")
                 break  # No transition ready, exit gracefully
+
+        print(f"[TIMING] step total: {time.time() - step_start:.3f}s")
         print("LAST_AI_MSG", last_ai_message)
         self.current_state = self.flow.get_state("agent_reply")
         return last_ai_message

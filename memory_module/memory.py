@@ -3,9 +3,12 @@ import os
 import uuid
 import sys
 import psycopg2
+from psycopg2 import pool
 from typing import Dict, Any
 from mem0 import Memory as Mem0Memory
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -64,6 +67,27 @@ config = {
     },
 }
 
+# Global connection pool (initialized lazily)
+_connection_pool = None
+_pool_lock = threading.Lock()
+
+# Background executor for non-blocking mem0 operations
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="mem0_bg")
+
+
+def _get_pool(db_url: str):
+    """Get or create the global connection pool."""
+    global _connection_pool
+    if _connection_pool is None:
+        with _pool_lock:
+            if _connection_pool is None:
+                _connection_pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=10,
+                    dsn=db_url
+                )
+    return _connection_pool
+
 
 class Memory:
     """
@@ -72,12 +96,18 @@ class Memory:
 
     """
 
-    def __init__(self, user_id: str, session_id: str, db_url: str):
+    def __init__(self, user_id: str, session_id: str, db_url: str, use_long_term: bool = True):
         self.user_id = user_id
         self.db_url = db_url
+        self.use_long_term = use_long_term  # Toggle for long-term memory
 
-        # initialize mem0
-        self.mem0 = Mem0Memory.from_config(config)
+        # Initialize connection pool
+        self._pool = _get_pool(db_url)
+
+        # initialize mem0 (lazy - only if needed)
+        self._mem0 = None
+        if self.use_long_term:
+            self._mem0 = Mem0Memory.from_config(config)
 
         # session handling
         self.session_id = session_id if session_id is not None else str(uuid.uuid4())
@@ -104,61 +134,72 @@ class Memory:
             raise ValueError(f"Unknown role: {role}")
         return cls.model_validate_json(message)
 
+    def _add_to_mem0_background(self, content: str, metadata: dict):
+        """Background task to add to mem0 (non-blocking)."""
+        try:
+            if self._mem0:
+                self._mem0.add(
+                    messages=content, metadata=metadata, user_id=self.user_id
+                )
+        except Exception as e:
+            print(f"[mem0 background] Error: {e}")
+
     def add_memory(self, message) -> bool:
-        """Add a single turn to Mem0 + Postgres."""
+        """Add a single turn to Postgres (fast) + Mem0 in background."""
         try:
             role = CLASS_TO_ROLE[type(message)]
 
-            metadata = {
-                "user_id": self.user_id,
-                "session_id": self.session_id,
-                "role": role,
-            }
+            # Store in Postgres immediately (fast, using pool)
+            conn = self._pool.getconn()
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO conversation_context (user_id, session_id, role, message)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (self.user_id, self.session_id, role, self.serialize(message)),
+                )
+                conn.commit()
+                cur.close()
+            finally:
+                self._pool.putconn(conn)
 
-            # store in mem0
-            self.mem0.add(
-                messages=message.content, metadata=metadata, user_id=self.user_id
-            )
-
-            conn = psycopg2.connect(self.db_url)
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO conversation_context (user_id, session_id, role, message)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (self.user_id, self.session_id, role, self.serialize(message)),
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
+            # Store in mem0 in background (non-blocking)
+            if self.use_long_term and self._mem0:
+                metadata = {
+                    "user_id": self.user_id,
+                    "session_id": self.session_id,
+                    "role": role,
+                }
+                _executor.submit(self._add_to_mem0_background, message.content, metadata)
 
             return True
 
         except Exception as e:
             import traceback
-
             traceback.print_exc()
-            raise
-            print(e)
             return False
 
     def retrieve_long_memory(
-        self, context: list = [], mem0_limit: int = 50
-    ) -> Dict[str, Any]:
+        self, context: list = [], mem0_limit: int = 10
+    ) -> SystemMessage:
         """Retrieve relevant long term memories for the current user."""
+        # Skip if long-term memory is disabled
+        if not self.use_long_term or not self._mem0:
+            return SystemMessage(content="")
+
         try:
-            # Mem0 vector retrieval
+            # Build query from recent context only (faster)
+            query = " ".join(m.content for m in context[-2:] if hasattr(m, 'content'))
 
-            query = ""
+            if not query.strip():
+                return SystemMessage(content="")
 
-            for message in context:
-                query += f" \n {message.content}"
-
-            results = self.mem0.search(
+            results = self._mem0.search(
                 query=query,
                 user_id=self.user_id,
-                limit=mem0_limit,
+                limit=mem0_limit,  # Reduced from 50 to 10
             )
 
             memory_entries = [
@@ -166,46 +207,45 @@ class Memory:
                 for r in results.get("results", [])
             ]
 
-            memory_string = "retrieved memories:\n" + "\n".join(memory_entries)
+            if not memory_entries:
+                return SystemMessage(content="")
 
+            memory_string = "retrieved memories:\n" + "\n".join(memory_entries)
             return SystemMessage(content=memory_string)
 
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
-            raise
-
-            return "retrieval_failed"
+        except Exception as e:
+            print(f"[retrieve_long_memory] Error: {e}")
+            return SystemMessage(content="")
 
     def retrieve_short_memory(self, turns):
         """Retrieve relevant short term memories for the current user"""
         try:
-            conn = psycopg2.connect(self.db_url)
-            cur = conn.cursor()
-            cur.execute(
-                """
-            SELECT role, message
-            FROM (
-                SELECT id, role, message
-                FROM conversation_context
-                WHERE user_id = %s
-                ORDER BY id DESC
-                LIMIT %s
-            ) sub
-            ORDER BY id ASC
-            """,
-                (self.user_id, turns),
-            )
-
-            rows = cur.fetchall()
-            cur.close()
-            conn.close()
+            conn = self._pool.getconn()
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT role, message
+                    FROM (
+                        SELECT id, role, message
+                        FROM conversation_context
+                        WHERE user_id = %s
+                        ORDER BY id DESC
+                        LIMIT %s
+                    ) sub
+                    ORDER BY id ASC
+                    """,
+                    (self.user_id, turns),
+                )
+                rows = cur.fetchall()
+                cur.close()
+            finally:
+                self._pool.putconn(conn)
 
             return [self.deserialize(message=msg, role=role) for role, msg in rows]
 
         except Exception as e:
-            print(e)
+            print(f"[retrieve_short_memory] Error: {e}")
             return []
 
 
