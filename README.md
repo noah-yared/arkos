@@ -5,7 +5,7 @@ ARK (Automated Resource Knowledgebase) revolutionizes resource management via au
 
 ## Languages and Dependencies
 
-The entire codebase is in Python, except for a few shell scripts. 
+The entire codebase is in Python, except for a few shell scripts. Docker is needed for quick setup 
 
 ### Core Dependencies
 
@@ -91,7 +91,13 @@ bash model_module/run.sh
 
 This starts the SGLang server on port 30000 using Docker and GPU. Wait for "server started" messages (may take 1-2 minutes on first run).
 
-**Note:** Only ONE instance can run on port 30000 at a time. If someone else is using it, coordinate with your team.
+
+
+```bash
+bash model_module/run_tei.sh
+```
+
+This starts the Huggingface-TEI server on port 4444 using Docker and GPU. Wait for "server started" messages 
 
 ### Setting .env Variables 
 
