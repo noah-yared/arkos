@@ -5,7 +5,7 @@ initial: agent_reply
 states:
   ask_user:
     description: "state used for input from user"
-    type: user # change type to a better identifier
+    type: user 
     transition:
       next: [agent_reply]
 
