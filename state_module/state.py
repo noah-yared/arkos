@@ -2,13 +2,6 @@ from enum import Enum
 from typing import Dict, Any, Optional
 
 
-class AgentState(Enum):
-    """Central registry of all possible agent states."""
-
-    GREET_USER = "greet_user"
-    FETCH_PRODUCT = "fetch_product"
-    SUMMARIZE_RESULT = "summarize_result"
-    DONE = "done"
 
 
 class State:
