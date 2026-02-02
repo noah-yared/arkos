@@ -46,7 +46,6 @@ pip install -r requirements.txt
 * `state_module/` for defining agent state graphs 
 * `tool_module/` for MCP compatibility 
 * `memory_module/` for long term memory and context management
-* `schemas/` for JSON schemas when communicating between frontend and backend
 * `state_module/`
 * `tool_module/`
 * `.gitignore`
