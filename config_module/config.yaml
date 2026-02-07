@@ -24,7 +24,7 @@ database:
 
 
 memory:
-  user_id: "luoxi-agent"        
+  user_id: "arkos-agent"        
   short_term_turns: 50
   long_term_limit: 5
   use_long_term: true
