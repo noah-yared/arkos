@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from model_module.ArkModelNew import (
-    Message,
     UserMessage,
     AIMessage,
     SystemMessage,
@@ -139,8 +138,9 @@ class TestMemoryWithMockedDB:
     @pytest.fixture
     def memory_instance(self):
         """Create a Memory instance with mocked database pool and mem0."""
-        with patch("memory_module.memory._get_pool") as mock_pool, patch(
-            "memory_module.memory.Mem0Memory"
+        with (
+            patch("memory_module.memory._get_pool") as mock_pool,
+            patch("memory_module.memory.Mem0Memory"),
         ):
             mock_conn = MagicMock()
             mock_cursor = MagicMock()

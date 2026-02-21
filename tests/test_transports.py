@@ -3,7 +3,6 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from pathlib import Path
 
 from tool_module.transports.stdio import StdioTransport
 from tool_module.transports.http import HTTPTransport, OAuthManager
@@ -46,7 +45,9 @@ class TestStdioTransport:
     async def test_connect_starts_subprocess(self):
         t = StdioTransport(command="echo", args=["hello"])
         mock_proc = MagicMock()
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_exec.return_value = mock_proc
             await t.connect()
             assert t.process is mock_proc

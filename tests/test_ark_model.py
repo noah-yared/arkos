@@ -102,7 +102,9 @@ class TestMakeLLMCall:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             result = await model.make_llm_call(
                 [UserMessage(content="hello")], json_schema=None
@@ -122,7 +124,9 @@ class TestMakeLLMCall:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_completion)
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             msgs = [
                 SystemMessage(content="sys"),
@@ -148,7 +152,9 @@ class TestMakeLLMCall:
 
         mock_client = MagicMock()
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             with pytest.raises(ValueError, match="Unsupported Message Type"):
                 await model.make_llm_call(
@@ -161,7 +167,9 @@ class TestMakeLLMCall:
 
         mock_client = MagicMock()
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             result = await model.make_llm_call(
                 [UserMessage(content="hello")], json_schema=None, stream=True
@@ -179,7 +187,9 @@ class TestMakeLLMCall:
         )
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             result = await model.make_llm_call(
                 [UserMessage(content="hello")], json_schema=None
@@ -225,7 +235,9 @@ class TestGenerateStream:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             tokens = []
             async for token in model.generate_stream([UserMessage(content="hi")]):
@@ -252,7 +264,9 @@ class TestGenerateStream:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_stream())
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             tokens = []
             async for token in model.generate_stream([UserMessage(content="hi")]):
@@ -269,7 +283,9 @@ class TestGenerateStream:
         )
 
         with patch.object(
-            ArkModelLink, "client", new_callable=lambda: property(lambda self: mock_client)
+            ArkModelLink,
+            "client",
+            new_callable=lambda: property(lambda self: mock_client),
         ):
             tokens = []
             async for token in model.generate_stream([UserMessage(content="hi")]):

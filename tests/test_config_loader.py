@@ -1,6 +1,5 @@
 """Tests for ConfigLoader in config_module/loader.py."""
 
-import os
 import pytest
 import yaml
 from pathlib import Path

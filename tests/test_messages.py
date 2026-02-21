@@ -1,6 +1,5 @@
 """Tests for Message Pydantic models in model_module/ArkModelNew.py."""
 
-import pytest
 from model_module.ArkModelNew import (
     Message,
     SystemMessage,

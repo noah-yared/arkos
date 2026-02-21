@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from model_module.ArkModelNew import AIMessage, SystemMessage, UserMessage
 from agent_module.agent import Agent, MAX_ITER
@@ -164,18 +164,14 @@ class TestAddContext:
 
 class TestGetContext:
     def test_short_term_only(self, agent):
-        agent.memory.retrieve_short_memory.return_value = [
-            UserMessage(content="msg1")
-        ]
+        agent.memory.retrieve_short_memory.return_value = [UserMessage(content="msg1")]
 
         result = agent.get_context(turns=5, include_long_term=False)
         assert len(result) == 1
         agent.memory.retrieve_long_memory.assert_not_called()
 
     def test_with_long_term(self, agent):
-        agent.memory.retrieve_short_memory.return_value = [
-            UserMessage(content="hi")
-        ]
+        agent.memory.retrieve_short_memory.return_value = [UserMessage(content="hi")]
         agent.memory.retrieve_long_memory.return_value = SystemMessage(
             content="remembered: user likes blue"
         )
@@ -185,9 +181,7 @@ class TestGetContext:
         assert isinstance(result[0], SystemMessage)
 
     def test_empty_long_term_excluded(self, agent):
-        agent.memory.retrieve_short_memory.return_value = [
-            UserMessage(content="hi")
-        ]
+        agent.memory.retrieve_short_memory.return_value = [UserMessage(content="hi")]
         agent.memory.retrieve_long_memory.return_value = SystemMessage(content="")
 
         result = agent.get_context(turns=5, include_long_term=True)

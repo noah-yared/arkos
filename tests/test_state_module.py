@@ -155,7 +155,9 @@ class TestStateAI:
 
         result = await sa.run([], mock_agent)
         assert isinstance(result, AIMessage)
-        assert "issue" in result.content.lower() or "try again" in result.content.lower()
+        assert (
+            "issue" in result.content.lower() or "try again" in result.content.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_run_with_clarification(self):
@@ -257,11 +259,10 @@ class TestStateTool:
         mock_agent = MagicMock()
         mock_agent.current_user_id = "user1"
 
-        with patch.object(
-            st, "choose_tool", new_callable=AsyncMock
-        ) as mock_choose, patch.object(
-            st, "execute_tool", new_callable=AsyncMock
-        ) as mock_exec:
+        with (
+            patch.object(st, "choose_tool", new_callable=AsyncMock) as mock_choose,
+            patch.object(st, "execute_tool", new_callable=AsyncMock) as mock_exec,
+        ):
             mock_choose.return_value = {"tool_name": "calc", "tool_args": {"x": 1}}
             mock_exec.return_value = "42"
 

@@ -1,7 +1,7 @@
 """Tests for tool_module/tool_call.py: AuthRequiredError, MCPServerConfig, MCPClient, MCPToolManager."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from tool_module.tool_call import (
     AuthRequiredError,

@@ -5,7 +5,6 @@ the full agent stack (DB, LLM, etc.) at module level. We test the function
 in isolation by defining it here (same logic as base_module/app.py:63-82).
 """
 
-import pytest
 from unittest.mock import MagicMock
 
 
@@ -50,7 +49,10 @@ class TestFormatToolsForSystemPrompt:
     def test_tool_with_input_schema(self):
         tool = MagicMock()
         tool.description = "Calculator"
-        tool.input_schema = {"type": "object", "properties": {"expr": {"type": "string"}}}
+        tool.input_schema = {
+            "type": "object",
+            "properties": {"expr": {"type": "string"}},
+        }
         result = format_tools_for_system_prompt({"calc": tool})
         assert "Tool name: calc" in result
         assert "Input schema:" in result
