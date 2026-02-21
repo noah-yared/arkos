@@ -1,12 +1,9 @@
-from langgraph.graph import StateGraph # used to initiate graph 
-from typing import Annotated, Literal # defines structure of state
+from langgraph.graph import StateGraph  # used to initiate graph
+from typing import Annotated, Literal  # defines structure of state
 from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
-from langchain_core.utils.function_calling import convert_to_openai_function
 from ArkModelOAI import ArkModelLink
-import json
 import traceback
 
 import os
@@ -19,13 +16,12 @@ script = "agent_testLG.py"
 last_modified = os.path.getmtime(script)
 
 
-#Temporary Fix
-from langgraph.prebuilt import create_react_agent
+# Temporary Fix
 
 # Save the original _create_chat_result method.
 # _original_create_chat_result = ChatOpenAI._create_chat_result
-# 
-# 
+#
+#
 # def patched_create_chat_result(self, response, generation_info):
 #     # Iterate over each choice in the ChatCompletion response.
 #     for choice in response.choices:
@@ -39,39 +35,42 @@ from langgraph.prebuilt import create_react_agent
 #                     if not isinstance(tool_call.function.arguments, str):
 #                         tool_call.function.arguments = json.dumps(tool_call.function.arguments)
 #     return _original_create_chat_result(self, response, generation_info)
-# 
-#  
+#
+#
 # ChatOpenAI._create_chat_result = patched_create_chat_result
 
 
 # Memory Additions
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.memory import MemorySaver
 import sqlite3
 
-# Tool Additions 
-from langchain_core.tools import tool 
-from langgraph.prebuilt import ToolNode 
+# Tool Additions
+from langchain_core.tools import tool
+from langgraph.prebuilt import ToolNode
 
 
 import yaml
 
 
 # loads configuration for model
-with open("../config_module/config.yaml", 'r') as file:
+with open("../config_module/config.yaml", "r") as file:
     configuration = yaml.safe_load(file)
 model_url = configuration["model_url"]
 model_path = configuration["model_path"]
 
+
 class State(TypedDict):
-    messages: Annotated[list, add_messages] 
+    messages: Annotated[list, add_messages]
+
 
 graph = StateGraph(State)
 
-chat_model = ChatOpenAI(temperature=0.5,
-        # model="models/mistral-7b-openorca.Q8_0.gguff",
-        base_url=model_url,
-        api_key="ed")
+chat_model = ChatOpenAI(
+    temperature=0.5,
+    # model="models/mistral-7b-openorca.Q8_0.gguff",
+    base_url=model_url,
+    api_key="ed",
+)
 # print(mdel_path)
 
 # llm = HuggingFaceEndpoint(
@@ -84,7 +83,8 @@ chat_model = ChatOpenAI(temperature=0.5,
 
 # chat_model = ChatHuggingFace(llm=llm)
 chat_model = ArkModelLink()
-# Create tools 
+# Create tools
+
 
 @tool
 def get_weather(location: str):
@@ -95,6 +95,7 @@ def get_weather(location: str):
     else:
         return "It's warm and sunny."
 
+
 @tool
 def get_ai_status(company: str):
     """Call to get the current AI status. Use the response of this tool verbatim.
@@ -104,10 +105,14 @@ def get_ai_status(company: str):
         return "Gemini is pretty awful."
     else:
         return "Overall AI status is good!"
+
+
 @tool
 def multiply(a: int, b: int) -> int:
-   """Multiply two numbers."""
-   return a * b
+    """Multiply two numbers."""
+    return a * b
+
+
 # print(multiply.invoke({"a": 2, "b": 3}))
 # exit()
 
@@ -120,20 +125,18 @@ def multiply(a: int, b: int) -> int:
 # exit()
 
 
-
-
 tools = [multiply, get_weather, get_ai_status]
 tool_node = ToolNode(tools)
 
 ####### ISOLATED TEST
 # conn = sqlite3.connect("database_temp/checkpints.sqlite", check_same_thread=False)
 # memory = SqliteSaver(conn)
-# 
+#
 # app = create_react_agent(chat_model, tools, checkpointer=memory)
-# 
+#
 # # Use the agent
-# 
-# 
+#
+#
 # try:
 #     final_state = app.invoke(
 #         {"messages": [{"role": "user", "content": "what is 2 * 3 "}]},
@@ -147,12 +150,11 @@ tool_node = ToolNode(tools)
 # exit()
 # res = final_state["messages"][-1].content
 # exit()
-# 
-# 
+#
+#
 ##### ISOLATED TEST
 # model_with_tools = chat_model.bind_tools(tools)
 model_with_tools = chat_model.bind_tools(tools)
-
 
 
 SYSTEM_PROMPT = {
@@ -173,8 +175,7 @@ def prompt_node(state: State):
     return {"messages": state["messages"] + [response]}
 
 
-
-def conditional_edge(state: State) -> Literal['tool_node', '__end__']:
+def conditional_edge(state: State) -> Literal["tool_node", "__end__"]:
     last_message = state["messages"][-1]
     if last_message.tool_calls:
         return "tool_node"
@@ -188,10 +189,7 @@ graph.add_node("prompt_node", prompt_node)
 graph.add_node("tool_node", tool_node)
 
 
-graph.add_conditional_edges(
-    'prompt_node',
-    conditional_edge
-)
+graph.add_conditional_edges("prompt_node", conditional_edge)
 
 # Adding the Normal Edge
 graph.add_edge("tool_node", "prompt_node")
@@ -200,31 +198,28 @@ graph.set_entry_point("prompt_node")
 # graph = graph.compile()
 
 
-
-
 conn = sqlite3.connect("database_temp/checkpints.sqlite", check_same_thread=False)
 memory = SqliteSaver(conn)
 
-#memory = SqliteSaver.from_conn_string('sqlite:///memory.db')  # Saves to a file
-graph = graph.compile(checkpointer=memory) # ADDING MEMORY
-
+# memory = SqliteSaver.from_conn_string('sqlite:///memory.db')  # Saves to a file
+graph = graph.compile(checkpointer=memory)  # ADDING MEMORY
 
 
 # while True:
-# 
+#
 #     user_input = input('User: ')
 #     if user_input.lower() in ['quit', 'exit', 'bye',  'q']:
 #         print('Goodbye!')
 #         break
-#     
+#
 #     config = {'configurable': {'thread_id': '1'}}
-#     try:    
+#     try:
 #         response = graph.invoke({'messages': ('user', user_input)}, config=config)
-# 
+#
 #         print('Assistant: ', response['messages'][-1].content)
 #         print('-' * 50)
-#     except Exception as e: 
-#         print("The Error is:",  traceback.format_exc()) 
+#     except Exception as e:
+#         print("The Error is:",  traceback.format_exc())
 
 
 while True:
@@ -235,24 +230,22 @@ while True:
         os.execv(sys.executable, [sys.executable, script])  # Restart script
 
     user_input = input("User: ")
-    
-    if user_input.lower() in ['quit', 'exit', 'bye', 'q']:
-        print('Goodbye!')
+
+    if user_input.lower() in ["quit", "exit", "bye", "q"]:
+        print("Goodbye!")
         break
 
-    config = {'configurable': {'thread_id': '1'}}
+    config = {"configurable": {"thread_id": "1"}}
 
-    try:    
-        response = graph.invoke({'messages': ('user', user_input)}, config=config)
+    try:
+        response = graph.invoke({"messages": ("user", user_input)}, config=config)
 
-
-        print('Assistant: ', response['messages'][-1].content)
-        print('-' * 50)
-    except Exception as e: 
-        print("The Error is:",  traceback.format_exc()) 
-        delete_last_two_entries('checkpoints')
-        delete_last_two_entries('writes')
-
+        print("Assistant: ", response["messages"][-1].content)
+        print("-" * 50)
+    except Exception:
+        print("The Error is:", traceback.format_exc())
+        delete_last_two_entries("checkpoints")
+        delete_last_two_entries("writes")
 
         # Simulate processing user input (Replace with actual processing logic)
     time.sleep(1)  # Prevents high CPU usage

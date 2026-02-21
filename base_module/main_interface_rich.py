@@ -23,16 +23,16 @@ console = Console()
 bindings = KeyBindings()
 
 
-@bindings.add('enter')
+@bindings.add("enter")
 def handle_enter(event):
     """Enter submits the input."""
     event.current_buffer.validate_and_handle()
 
 
-@bindings.add('c-j')  # Ctrl+J for newline
+@bindings.add("c-j")  # Ctrl+J for newline
 def handle_newline(event):
     """Ctrl+J inserts a newline."""
-    event.current_buffer.insert_text('\n')
+    event.current_buffer.insert_text("\n")
 
 
 # Create prompt session with multi-line support
@@ -40,8 +40,7 @@ session = PromptSession(key_bindings=bindings, multiline=True)
 
 # Point to your running ArkOS agent
 client = OpenAI(
-    base_url=f"http://localhost:{config.get('app.port')}/v1",
-    api_key="not-needed"
+    base_url=f"http://localhost:{config.get('app.port')}/v1", api_key="not-needed"
 )
 
 # Conversation history for display
@@ -56,28 +55,34 @@ def display_header():
     header.add_row("[dim]Intelligent Agent Interface[/dim]")
 
     console.print(Panel(header, border_style="cyan", padding=(1, 2)))
-    console.print("[dim]Type [bold]/help[/bold] for commands, [bold]/exit[/bold] to quit[/dim]\n")
+    console.print(
+        "[dim]Type [bold]/help[/bold] for commands, [bold]/exit[/bold] to quit[/dim]\n"
+    )
 
 
 def display_message(role: str, content: str):
     """Display a message in a styled panel."""
     if role == "user":
-        console.print(Panel(
-            content,
-            title="[bold blue]You[/bold blue]",
-            title_align="left",
-            border_style="blue",
-            padding=(0, 1)
-        ))
+        console.print(
+            Panel(
+                content,
+                title="[bold blue]You[/bold blue]",
+                title_align="left",
+                border_style="blue",
+                padding=(0, 1),
+            )
+        )
     else:
         # Render assistant responses as markdown
-        console.print(Panel(
-            Markdown(content),
-            title="[bold green]ARK[/bold green]",
-            title_align="left",
-            border_style="green",
-            padding=(0, 1)
-        ))
+        console.print(
+            Panel(
+                Markdown(content),
+                title="[bold green]ARK[/bold green]",
+                title_align="left",
+                border_style="green",
+                padding=(0, 1),
+            )
+        )
 
 
 def chat_stream(prompt: str) -> str:
@@ -88,15 +93,20 @@ def chat_stream(prompt: str) -> str:
     full_response = ""
 
     with Live(
-        Panel(Spinner("dots", text="Thinking..."), border_style="green", title="[bold green]ARK[/bold green]", title_align="left"),
+        Panel(
+            Spinner("dots", text="Thinking..."),
+            border_style="green",
+            title="[bold green]ARK[/bold green]",
+            title_align="left",
+        ),
         console=console,
         refresh_per_second=10,
-        transient=True
+        transient=True,
     ) as live:
         stream = client.chat.completions.create(
             model="ark-agent",
             messages=[{"role": "user", "content": prompt}],
-            stream=True
+            stream=True,
         )
 
         for chunk in stream:
@@ -105,32 +115,38 @@ def chat_stream(prompt: str) -> str:
                 full_response += content
 
                 # Update live display with accumulated response
-                live.update(Panel(
-                    Markdown(full_response + "█"),
-                    title="[bold green]ARK[/bold green]",
-                    title_align="left",
-                    border_style="green",
-                    padding=(0, 1)
-                ))
+                live.update(
+                    Panel(
+                        Markdown(full_response + "█"),
+                        title="[bold green]ARK[/bold green]",
+                        title_align="left",
+                        border_style="green",
+                        padding=(0, 1),
+                    )
+                )
 
     # Final display without cursor
     if full_response:
-        console.print(Panel(
-            Markdown(full_response),
-            title="[bold green]ARK[/bold green]",
-            title_align="left",
-            border_style="green",
-            padding=(0, 1)
-        ))
+        console.print(
+            Panel(
+                Markdown(full_response),
+                title="[bold green]ARK[/bold green]",
+                title_align="left",
+                border_style="green",
+                padding=(0, 1),
+            )
+        )
         conversation_history.append({"role": "assistant", "content": full_response})
     else:
-        console.print(Panel(
-            "[dim italic]No response received[/dim italic]",
-            title="[bold green]ARK[/bold green]",
-            title_align="left",
-            border_style="yellow",
-            padding=(0, 1)
-        ))
+        console.print(
+            Panel(
+                "[dim italic]No response received[/dim italic]",
+                title="[bold green]ARK[/bold green]",
+                title_align="left",
+                border_style="yellow",
+                padding=(0, 1),
+            )
+        )
 
     return full_response
 
@@ -144,7 +160,7 @@ def chat(prompt: str) -> str:
         response = client.chat.completions.create(
             model="ark-agent",
             messages=[{"role": "user", "content": prompt}],
-            stream=False
+            stream=False,
         )
 
     message = response.choices[0].message.content
@@ -236,11 +252,13 @@ def main():
             console.print("\n[dim]Goodbye![/dim]")
             break
         except Exception as e:
-            console.print(Panel(
-                f"[red]{str(e)}[/red]",
-                title="[bold red]Error[/bold red]",
-                border_style="red"
-            ))
+            console.print(
+                Panel(
+                    f"[red]{str(e)}[/red]",
+                    title="[bold red]Error[/bold red]",
+                    border_style="red",
+                )
+            )
 
 
 if __name__ == "__main__":

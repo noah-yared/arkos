@@ -40,7 +40,7 @@ class Agent:
         self.llm = llm
         self.tool_manager = tool_manager
         self.current_state = self.flow.get_initial_state()
-        self.system_prompt=None
+        self.system_prompt = None
 
         self.startup_flag = True
         self.tools = []
@@ -318,7 +318,7 @@ class Agent:
                 self.current_state = self.flow.get_state("agent_reply")
 
             # Stream the state's output character by character
-            if update and hasattr(update, 'content') and update.content:
+            if update and hasattr(update, "content") and update.content:
                 self.add_context([update])
                 print(f"agent.py [STREAM] Streaming {len(update.content)} chars")
 

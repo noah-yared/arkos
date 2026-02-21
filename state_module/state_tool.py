@@ -93,6 +93,6 @@ class StateTool(State):
             # Return friendly message with connect link
             return SystemMessage(
                 content=f"To complete this request, please connect your {e.service_info.get('name', e.service)}:\n\n"
-                        f"👉 {e.connect_url}\n\n"
-                        f"After connecting, try your request again."
+                f"👉 {e.connect_url}\n\n"
+                f"After connecting, try your request again."
             )

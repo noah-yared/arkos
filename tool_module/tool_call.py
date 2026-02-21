@@ -32,8 +32,13 @@ class AuthRequiredError(Exception):
         self.service = service
         self.user_id = user_id
         self.service_info = PER_USER_SERVICES.get(service, {})
-        self.connect_url = f"{self.service_info.get('auth_path', '/auth/connect')}?user_id={user_id}"
-        self.message = message or f"Please connect {self.service_info.get('name', service)} to continue"
+        self.connect_url = (
+            f"{self.service_info.get('auth_path', '/auth/connect')}?user_id={user_id}"
+        )
+        self.message = (
+            message
+            or f"Please connect {self.service_info.get('name', service)} to continue"
+        )
         super().__init__(self.message)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -268,8 +273,7 @@ class MCPToolManager:
             )
         elif transport_type == "http":
             return HTTPTransport(
-                url=server_config["url"],
-                auth_config=server_config.get("auth")
+                url=server_config["url"], auth_config=server_config.get("auth")
             )
         else:
             raise ValueError(f"Unsupported transport type: {transport_type}")
@@ -292,9 +296,11 @@ class MCPToolManager:
         for server_name, server_config in self.config.items():
             # Skip per-user services during agent-level init
             if server_name in PER_USER_SERVICES:
-                logger.info(f"Skipping per-user service '{server_name}' (will init per-user)")
+                logger.info(
+                    f"Skipping per-user service '{server_name}' (will init per-user)"
+                )
                 # Register placeholder so we know this service exists
-                self._per_user_configs = getattr(self, '_per_user_configs', {})
+                self._per_user_configs = getattr(self, "_per_user_configs", {})
                 self._per_user_configs[server_name] = server_config
                 continue
 
@@ -330,7 +336,7 @@ class MCPToolManager:
                 logger.error(f"Failed to initialize server '{server_name}': {e}")
                 # Continue with other servers
 
-        if not self.clients and not getattr(self, '_per_user_configs', {}):
+        if not self.clients and not getattr(self, "_per_user_configs", {}):
             raise RuntimeError("No MCP servers successfully initialized")
 
         logger.info(
@@ -370,7 +376,9 @@ class MCPToolManager:
 
         return all_tools
 
-    async def _get_user_client(self, user_id: str, server_name: str) -> Optional[MCPClient]:
+    async def _get_user_client(
+        self, user_id: str, server_name: str
+    ) -> Optional[MCPClient]:
         """
         Get or create a per-user MCP client for a service.
 
@@ -434,7 +442,9 @@ class MCPToolManager:
             for tool in tools:
                 tool_name = tool["name"]
                 self._tool_registry[tool_name] = server_name
-                logger.info(f"Registered per-user tool '{tool_name}' from '{server_name}'")
+                logger.info(
+                    f"Registered per-user tool '{tool_name}' from '{server_name}'"
+                )
 
             # Cache the client
             if user_id not in self.user_clients:
@@ -442,7 +452,9 @@ class MCPToolManager:
             self.user_clients[user_id][server_name] = client
             return client
         except Exception as e:
-            logger.error(f"Failed to start per-user client for {user_id}/{server_name}: {e}")
+            logger.error(
+                f"Failed to start per-user client for {user_id}/{server_name}: {e}"
+            )
             return None
 
     async def call_tool(
@@ -476,11 +488,13 @@ class MCPToolManager:
 
         # If tool not in registry, check if it might be from a per-user service
         if not server_name:
-            per_user_configs = getattr(self, '_per_user_configs', {})
+            per_user_configs = getattr(self, "_per_user_configs", {})
             if per_user_configs:
                 # Check if user needs to auth first
                 for service_name in per_user_configs:
-                    if not self.token_store or not self.token_store.has_token(user_id or "", service_name):
+                    if not self.token_store or not self.token_store.has_token(
+                        user_id or "", service_name
+                    ):
                         # User hasn't connected this service - raise auth error
                         raise AuthRequiredError(
                             service=service_name,
@@ -501,7 +515,7 @@ class MCPToolManager:
                 raise AuthRequiredError(
                     service=server_name,
                     user_id="unknown",
-                    message=f"Tool '{tool_name}' requires user authentication"
+                    message=f"Tool '{tool_name}' requires user authentication",
                 )
             client = await self._get_user_client(user_id, server_name)
             if client:
@@ -566,7 +580,9 @@ class MCPToolManager:
                 try:
                     await client.stop()
                 except Exception as e:
-                    logger.error(f"Error stopping user client {user_id}/{server_name}: {e}")
+                    logger.error(
+                        f"Error stopping user client {user_id}/{server_name}: {e}"
+                    )
 
         self.clients.clear()
         self.user_clients.clear()

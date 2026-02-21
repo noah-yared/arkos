@@ -1,31 +1,37 @@
-import json
 import pprint
-from typing import Any, AsyncIterator, Dict, List, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 from openai import OpenAI
+
 # Removed direct requests import as it's now handled by huggingface_hub internally for streaming
-from huggingface_hub import AsyncInferenceClient # New import for streaming
+from huggingface_hub import AsyncInferenceClient  # New import for streaming
 
 pp = pprint.PrettyPrinter()
+
 
 # --- Custom Message Classes ---
 # These classes define the structure for different types of messages
 # in the conversation, replacing Langchain's BaseMessage, AIMessage, HumanMessage.
 class Message(BaseModel):
     """Base class for all messages."""
+
     content: str
     role: str
 
+
 class UserMessage(Message):
     """Represents a message from the user."""
+
     role: str = "user"
+
 
 class AIMessage(Message):
     """
     Represents a message from the AI.
     Can include tool calls if the AI decides to use tools.
     """
+
     role: str = "assistant"
     # content is now Optional[str] to handle cases where the AI's turn is solely a tool call.
     content: Optional[str] = None
@@ -33,12 +39,14 @@ class AIMessage(Message):
     # as returned by the OpenAI API (list of dicts).
     tool_calls: Optional[List[Dict[str, Any]]] = None
 
-class ToolMessage(BaseModel): # Changed to BaseModel as it now has tool_call_id
+
+class ToolMessage(BaseModel):  # Changed to BaseModel as it now has tool_call_id
     """
     Represents the output of a tool execution.
     The tool_call_id links this message back to the specific tool call
     made by the AI.
     """
+
     role: str = "tool"
     tool_call_id: str
     content: str
@@ -52,12 +60,15 @@ class CustomTool(BaseModel):
     A custom tool interface. Concrete tools should inherit from this
     and implement the 'invoke' method.
     """
+
     name: str = Field(description="The name of the tool.")
-    description: str = Field(description="A description of the tool's purpose and how to use it.")
+    description: str = Field(
+        description="A description of the tool's purpose and how to use it."
+    )
     args_schema: Dict[str, Any] = Field(
         default_factory=dict,
         description="JSON schema for the tool's input arguments. "
-                    "This defines the parameters the tool expects."
+        "This defines the parameters the tool expects.",
     )
 
     def invoke(self, args: Dict[str, Any]) -> Any:
@@ -65,7 +76,9 @@ class CustomTool(BaseModel):
         Execute the tool with the given arguments.
         This method must be implemented by concrete tool classes.
         """
-        raise NotImplementedError("Invoke method must be implemented by concrete tool classes.")
+        raise NotImplementedError(
+            "Invoke method must be implemented by concrete tool classes."
+        )
 
     def to_openai_function_schema(self) -> Dict[str, Any]:
         """
@@ -109,7 +122,9 @@ class ArkModelLink(BaseModel):
         """
         return next((tool for tool in self.tools if tool.name == name), None)
 
-    def make_llm_call(self, messages: List[Message], tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def make_llm_call(
+        self, messages: List[Message], tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         Makes a call to the OpenAI-compatible LLM endpoint.
 
@@ -124,7 +139,7 @@ class ArkModelLink(BaseModel):
         """
         client = OpenAI(
             base_url=self.base_url,
-            api_key="_", # Placeholder API key. The TGI server doesn't usually require one.
+            api_key="_",  # Placeholder API key. The TGI server doesn't usually require one.
         )
 
         # Convert custom Message objects into the format expected by the OpenAI API.
@@ -144,46 +159,58 @@ class ArkModelLink(BaseModel):
                 openai_messages_payload.append(msg_dict)
             elif isinstance(msg, ToolMessage):
                 # For ToolMessage, 'tool_call_id' is required.
-                openai_messages_payload.append({"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content})
+                openai_messages_payload.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.tool_call_id,
+                        "content": msg.content,
+                    }
+                )
             else:
                 # Catch-all for generic Message objects or unknown types (shouldn't happen with strict typing)
-                openai_messages_payload.append({"role": msg.role, "content": msg.content})
+                openai_messages_payload.append(
+                    {"role": msg.role, "content": msg.content}
+                )
 
         try:
             # Call the OpenAI API chat completions endpoint.
             chat_completion = client.chat.completions.create(
                 model=self.model_name,
                 messages=openai_messages_payload,
-                tools=tools, # Pass available tools if provided
-                tool_choice="auto", # Allows the model to decide whether to use a tool
+                tools=tools,  # Pass available tools if provided
+                tool_choice="auto",  # Allows the model to decide whether to use a tool
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
             )
             message_from_llm = chat_completion.choices[0].message
-            
+
             # Convert LLM's tool_calls (which are Pydantic objects) to a list of dictionaries
             # for consistent internal handling and passing back into the API in future turns.
             tool_calls_as_dicts = []
             if message_from_llm.tool_calls:
                 for tc in message_from_llm.tool_calls:
-                    tool_calls_as_dicts.append({
-                        "id": tc.id,
-                        "function": {
-                            "name": tc.function.name,
-                            # tc.function.arguments is already a dictionary from the openai client
-                            "arguments": tc.function.arguments
-                        },
-                        "type": "function" # As per OpenAI's tool_calls specification
-                    })
+                    tool_calls_as_dicts.append(
+                        {
+                            "id": tc.id,
+                            "function": {
+                                "name": tc.function.name,
+                                # tc.function.arguments is already a dictionary from the openai client
+                                "arguments": tc.function.arguments,
+                            },
+                            "type": "function",  # As per OpenAI's tool_calls specification
+                        }
+                    )
 
             return {
                 "tool_calls": tool_calls_as_dicts if tool_calls_as_dicts else None,
-                "message": message_from_llm.content
+                "message": message_from_llm.content,
             }
         except Exception as e:
             print(f"Error during LLM call: {e}")
-            return {"tool_calls": None, "message": f"Error: An error occurred during LLM call: {e}"}
-
+            return {
+                "tool_calls": None,
+                "message": f"Error: An error occurred during LLM call: {e}",
+            }
 
     def generate_response(self, initial_messages: List[Message]) -> AIMessage:
         """
@@ -209,10 +236,12 @@ class ArkModelLink(BaseModel):
 
         if tool_calls_from_llm:
             print("***** MODEL REQUESTED TOOLS ******")
-            
+
             # Append the model's tool call message to the conversation history.
             # The content might be empty if the model's turn was solely to call a tool.
-            conversation_history.append(AIMessage(content=llm_content_step_1, tool_calls=tool_calls_from_llm))
+            conversation_history.append(
+                AIMessage(content=llm_content_step_1, tool_calls=tool_calls_from_llm)
+            )
 
             # Execute each requested tool and add its output to the conversation history.
             for tool_call_data in tool_calls_from_llm:
@@ -228,15 +257,23 @@ class ArkModelLink(BaseModel):
                     print(f"DEBUG: {tool_output_str}")
                 else:
                     try:
-                        tool_output = tool.invoke(arguments) # Execute the tool with the dictionary arguments
-                        tool_output_str = str(tool_output) # Convert tool output to string for message
-                        print(f"Tool '{tool_name}' invoked with args {arguments}. Result: {tool_output_str}")
+                        tool_output = tool.invoke(
+                            arguments
+                        )  # Execute the tool with the dictionary arguments
+                        tool_output_str = str(
+                            tool_output
+                        )  # Convert tool output to string for message
+                        print(
+                            f"Tool '{tool_name}' invoked with args {arguments}. Result: {tool_output_str}"
+                        )
                     except Exception as e:
                         tool_output_str = f"Error invoking tool '{tool_name}': {e}"
                         print(f"Error invoking tool '{tool_name}': {e}")
-                
+
                 # Append the tool's output as a ToolMessage to the conversation history.
-                conversation_history.append(ToolMessage(content=tool_output_str, tool_call_id=tool_call_id))
+                conversation_history.append(
+                    ToolMessage(content=tool_output_str, tool_call_id=tool_call_id)
+                )
 
                 # Add a clarifying user-role prompt for the second LLM call,
                 # informing it about the tool's execution status.
@@ -257,20 +294,19 @@ class ArkModelLink(BaseModel):
                     )
                 conversation_history.append(UserMessage(content=synthesis_prompt))
 
-
             # Step 2: Make the SECOND LLM call with the updated conversation history
             # (which now includes the executed tool calls and their outputs).
             # This call should not expose tools, as it's for synthesizing the final answer.
             final_response = self.make_llm_call(conversation_history, tools=None)
             final_content = final_response["message"]
-            
+
             # The final AIMessage should report the tool calls that initiated this two-step process.
             # We explicitly ensure tool_calls are handled to prevent unexpected behavior in tests.
             # If the model requested a tool we don't have, we still report it in the final AIMessage,
             # but the content will reflect the handling of the unknown tool.
             return AIMessage(
                 content=final_content,
-                tool_calls=tool_calls_from_llm # Report the tools that were actually requested and processed
+                tool_calls=tool_calls_from_llm,  # Report the tools that were actually requested and processed
             )
 
         else:
@@ -278,7 +314,6 @@ class ArkModelLink(BaseModel):
             # If no tool was called in the first step, the LLM's initial response
             # is the direct answer.
             return AIMessage(content=llm_content_step_1, tool_calls=None)
-
 
     def bind_tools(self, tools: List[CustomTool]) -> "ArkModelLink":
         """
@@ -298,7 +333,9 @@ class ArkModelLink(BaseModel):
         """
         # Create an AsyncInferenceClient for streaming
         # The base_url might need to be adjusted based on your TGI setup if it's not http://localhost:8080
-        hf_client = AsyncInferenceClient(base_url=self.base_url.replace("/v1", "")) # Remove /v1 for hf_client
+        hf_client = AsyncInferenceClient(
+            base_url=self.base_url.replace("/v1", "")
+        )  # Remove /v1 for hf_client
 
         # Convert custom Message objects into the format expected by the HF client
         hf_messages_payload = []
@@ -320,7 +357,7 @@ class ArkModelLink(BaseModel):
                 # If tool outputs need to be presented to the model in streaming, they would be integrated
                 # into the 'assistant' or 'user' content, or a specific system message.
                 # For this implementation, we assume tool execution happens outside this streaming method.
-                pass # Tool messages are not typically part of the direct streaming input for HF models.
+                pass  # Tool messages are not typically part of the direct streaming input for HF models.
             else:
                 hf_messages_payload.append({"role": msg.role, "content": msg.content})
 
@@ -330,12 +367,12 @@ class ArkModelLink(BaseModel):
                 model=self.model_name,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                stream=True, # Crucial for streaming responses
+                stream=True,  # Crucial for streaming responses
                 # Tools are not directly passed to the streaming endpoint this way in HF
                 # If tool functions were to be used by the model itself, it would be configured in the model.
                 # Here, we're assuming tool calls are part of the two-step generate_response process.
             )
-            
+
             # Corrected syntax: `async for chunk in stream:`
             async for chunk in stream:
                 # `chunk.choices[0].delta.content` holds the streamed text
@@ -348,7 +385,9 @@ class ArkModelLink(BaseModel):
 
         except Exception as e:
             print(f"Error during streaming request with huggingface_hub: {e}")
-            yield AIMessage(content=f"Error: Could not connect to stream or stream error: {e}")
+            yield AIMessage(
+                content=f"Error: Could not connect to stream or stream error: {e}"
+            )
             return
 
 
@@ -377,8 +416,15 @@ if __name__ == "__main__":
         args_schema: Dict[str, Any] = {
             "type": "object",
             "properties": {
-                "location": {"type": "string", "description": "The city and state, e.g. San Francisco, CA"},
-                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"], "default": "fahrenheit"},
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
+                },
+                "unit": {
+                    "type": "string",
+                    "enum": ["celsius", "fahrenheit"],
+                    "default": "fahrenheit",
+                },
             },
             "required": ["location"],
         }
@@ -386,7 +432,9 @@ if __name__ == "__main__":
         def invoke(self, args: Dict[str, Any]) -> str:
             location = args.get("location")
             unit = args.get("unit", "fahrenheit")
-            print(f"DEBUG: Invoking get_current_weather for '{location}' in unit '{unit}'")
+            print(
+                f"DEBUG: Invoking get_current_weather for '{location}' in unit '{unit}'"
+            )
             # Simulate an external API call to get weather data
             if "San Francisco, CA" == location:
                 return f"The current weather in San Francisco, CA is 72 degrees {unit} and sunny."
@@ -401,19 +449,25 @@ if __name__ == "__main__":
         args_schema: Dict[str, Any] = {
             "type": "object",
             "properties": {
-                "timezone": {"type": "string", "description": "The timezone to get the time for, e.g., 'America/Los_Angeles'"}
+                "timezone": {
+                    "type": "string",
+                    "description": "The timezone to get the time for, e.g., 'America/Los_Angeles'",
+                }
             },
-            "required": ["timezone"]
+            "required": ["timezone"],
         }
 
         def invoke(self, args: Dict[str, Any]) -> str:
             import datetime
-            import pytz # Requires 'pytz' library: pip install pytz
+            import pytz  # Requires 'pytz' library: pip install pytz
+
             timezone_str = args.get("timezone", "UTC")
             try:
                 tz = pytz.timezone(timezone_str)
                 now = datetime.datetime.now(tz)
-                return f"The current time in {timezone_str} is {now.strftime('%H:%M:%S')}."
+                return (
+                    f"The current time in {timezone_str} is {now.strftime('%H:%M:%S')}."
+                )
             except pytz.UnknownTimeZoneError:
                 return f"Error: Unknown timezone '{timezone_str}'."
             except Exception as e:
@@ -423,19 +477,22 @@ if __name__ == "__main__":
     print("Binding dummy tools...")
     chat_model.bind_tools(tools=[GetCurrentWeatherTool(), GetCurrentTimeTool()])
 
-
     # --- Test Case 1: Question that triggers the weather tool ---
     print("\n--- Test 1: Tool call (Weather) ---")
     messages_with_weather_tool_call = [
         UserMessage(content="What's the weather like in San Francisco, CA?"),
     ]
-    response_with_weather_tool = chat_model.generate_response(messages_with_weather_tool_call)
+    response_with_weather_tool = chat_model.generate_response(
+        messages_with_weather_tool_call
+    )
     print("\nResponse (with weather tool call):")
-    pp.pprint(response_with_weather_tool.model_dump()) # Changed to model_dump()
+    pp.pprint(response_with_weather_tool.model_dump())  # Changed to model_dump()
     assert "72 degrees" in response_with_weather_tool.content
     assert response_with_weather_tool.tool_calls is not None
-    assert response_with_weather_tool.tool_calls[0]["function"]["name"] == "get_current_weather"
-
+    assert (
+        response_with_weather_tool.tool_calls[0]["function"]["name"]
+        == "get_current_weather"
+    )
 
     # --- Test Case 2: Question that triggers the time tool ---
     print("\n--- Test 2: Tool call (Time) ---")
@@ -444,10 +501,12 @@ if __name__ == "__main__":
     ]
     response_with_time_tool = chat_model.generate_response(messages_with_time_tool_call)
     print("\nResponse (with time tool call):")
-    pp.pprint(response_with_time_tool.model_dump()) # Changed to model_dump()
+    pp.pprint(response_with_time_tool.model_dump())  # Changed to model_dump()
     assert "The current time in America/New_York" in response_with_time_tool.content
     assert response_with_time_tool.tool_calls is not None
-    assert response_with_time_tool.tool_calls[0]["function"]["name"] == "get_current_time"
+    assert (
+        response_with_time_tool.tool_calls[0]["function"]["name"] == "get_current_time"
+    )
 
     # --- Test Case 3: Question that does NOT trigger a tool (direct answer) ---
     print("\n--- Test 3: No tool call (direct answer) ---")
@@ -456,19 +515,23 @@ if __name__ == "__main__":
     ]
     response_no_tool = chat_model.generate_response(messages_no_tool_call)
     print("\nResponse (no tool call):")
-    pp.pprint(response_no_tool.model_dump()) # Changed to model_dump()
+    pp.pprint(response_no_tool.model_dump())  # Changed to model_dump()
     assert response_no_tool.content is not None and len(response_no_tool.content) > 0
-
 
     # --- Test Case 4: Asynchronous Streaming Response ---
     print("\n--- Test 4: Asynchronous streaming response ---")
+
     async def run_streaming_test():
-        stream_messages = [UserMessage(content="Tell me a short story about a brave knight and a dragon.")]
+        stream_messages = [
+            UserMessage(
+                content="Tell me a short story about a brave knight and a dragon."
+            )
+        ]
         print("\nStreaming response:")
         full_content = ""
         async for chunk in chat_model.astream_response(stream_messages):
             if chunk.content:
-                print(chunk.content, end="", flush=True) # Print content as it streams
+                print(chunk.content, end="", flush=True)  # Print content as it streams
                 full_content += chunk.content
             if chunk.tool_calls:
                 # In a real application, you would accumulate these tool_calls deltas
@@ -478,20 +541,23 @@ if __name__ == "__main__":
         print(f"Full streamed content length: {len(full_content)}")
 
     import asyncio
+
     try:
         # Run the asynchronous streaming test.
         asyncio.run(run_streaming_test())
     except RuntimeError as e:
         if "cannot run the event loop while another loop is running" in str(e):
-            print("\nNote: Asyncio runtime error detected. This usually happens when running multiple "
-                  "async functions sequentially in a single script without proper management. "
-                  "To resolve, execute this test in a fresh Python interpreter session or restructure "
-                  "your test suite.")
+            print(
+                "\nNote: Asyncio runtime error detected. This usually happens when running multiple "
+                "async functions sequentially in a single script without proper management. "
+                "To resolve, execute this test in a fresh Python interpreter session or restructure "
+                "your test suite."
+            )
         else:
             raise
 
     print("\nAll refactoring and tests complete.")
-    print("If you encountered 'Error: Could not connect to stream' or similar, ensure your "
-          "TGI server is running at 'http://localhost:8080/v1' and is accessible.")
-
-
+    print(
+        "If you encountered 'Error: Could not connect to stream' or similar, ensure your "
+        "TGI server is running at 'http://localhost:8080/v1' and is accessible."
+    )

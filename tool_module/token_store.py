@@ -6,7 +6,7 @@ import os
 import json
 import psycopg2
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 class UserTokenStore:

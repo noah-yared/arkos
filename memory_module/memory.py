@@ -2,9 +2,8 @@
 import os
 import uuid
 import sys
-import psycopg2
 from psycopg2 import pool
-from typing import Dict, Any
+from typing import Dict
 from mem0 import Memory as Mem0Memory
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
@@ -82,9 +81,7 @@ def _get_pool(db_url: str):
         with _pool_lock:
             if _connection_pool is None:
                 _connection_pool = pool.ThreadedConnectionPool(
-                    minconn=1,
-                    maxconn=10,
-                    dsn=db_url
+                    minconn=1, maxconn=10, dsn=db_url
                 )
     return _connection_pool
 
@@ -96,7 +93,9 @@ class Memory:
 
     """
 
-    def __init__(self, user_id: str, session_id: str, db_url: str, use_long_term: bool = True):
+    def __init__(
+        self, user_id: str, session_id: str, db_url: str, use_long_term: bool = True
+    ):
         self.user_id = user_id
         self.db_url = db_url
         self.use_long_term = use_long_term  # Toggle for long-term memory
@@ -172,12 +171,15 @@ class Memory:
                     "session_id": self.session_id,
                     "role": role,
                 }
-                _executor.submit(self._add_to_mem0_background, message.content, metadata)
+                _executor.submit(
+                    self._add_to_mem0_background, message.content, metadata
+                )
 
             return True
 
-        except Exception as e:
+        except Exception:
             import traceback
+
             traceback.print_exc()
             return False
 
@@ -191,7 +193,7 @@ class Memory:
 
         try:
             # Build query from recent context only (faster)
-            query = " ".join(m.content for m in context[-2:] if hasattr(m, 'content'))
+            query = " ".join(m.content for m in context[-2:] if hasattr(m, "content"))
 
             if not query.strip():
                 return SystemMessage(content="")
