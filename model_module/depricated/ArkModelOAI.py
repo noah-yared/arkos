@@ -7,13 +7,10 @@ from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
-from huggingface_hub import InferenceClient
 from openai import OpenAI
-import pprint 
+import pprint
+
 pp = pprint.PrettyPrinter()
-
-
-
 
 
 class ArkModelLink(BaseChatModel, BaseModel):
@@ -25,29 +22,28 @@ class ArkModelLink(BaseChatModel, BaseModel):
     temperature: float = Field(default=0.7)
     tools: Optional[List[BaseTool]] = Field(default_factory=list)
 
-
     def _convert_tools(self) -> Optional[List[Dict[str, Any]]]:
         if not self.tools:
             return None
 
         def convert_tool(tool: BaseTool) -> Dict[str, Any]:
             tool_as_dict = convert_to_openai_function(tool)
-            return {
-                "type": "function",
-                "function": tool_as_dict
-            }
-            
+            return {"type": "function", "function": tool_as_dict}
+
         converted = [convert_tool(tool) for tool in self.tools]
         return converted
+
     def _get_tool_by_name(self, name: str) -> Optional[BaseTool]:
         return next((tool for tool in self.tools if tool.name == name), None)
 
-    def make_llm_call(self, messages: List[BaseMessage], tools: Optional[List[Dict[str, Any]]] = None) -> Union[str, Dict[str, Any]]:
+    def make_llm_call(
+        self, messages: List[BaseMessage], tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Union[str, Dict[str, Any]]:
         client = OpenAI(
             base_url="http://localhost:8080/v1",
             api_key="_",
         )
-        
+
         chat_completion = client.chat.completions.create(
             model="tgi",
             messages=[
@@ -65,25 +61,24 @@ class ArkModelLink(BaseChatModel, BaseModel):
             max_tokens=self.max_tokens,
         )
         message = chat_completion.choices[0].message
-        return {"tool_calls": message.tool_calls, "message": message.content} 
-    
+        return {"tool_calls": message.tool_calls, "message": message.content}
+
     def _generate(
-    self,
-    messages: List[BaseMessage],
-    stop: Optional[List[str]] = None,
-    run_manager: Optional[CallbackManagerForLLMRun] = None,
-    **kwargs: Any
-) -> ChatResult:
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
         tool_schemas = self._convert_tools()
 
         # Step 1: Make initial LLM call
         response = self.make_llm_call(messages, tools=tool_schemas)
         original_tool_calls = response["tool_calls"]
-        if response["tool_calls"]: 
-
+        if response["tool_calls"]:
             print("***** IM USING TOOLS ******")
-            tool_messages = [] 
-            
+            tool_messages = []
+
             for tool_call in response["tool_calls"]:
                 tool_name = tool_call.function.name
                 arguments = tool_call.function.arguments
@@ -94,11 +89,9 @@ class ArkModelLink(BaseChatModel, BaseModel):
 
                 tool_args = arguments
 
-                
-
                 tool_output = tool.invoke(tool_args)
                 tool_message = {
-                    "type" : "message",
+                    "type": "message",
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": str(tool_output),
@@ -109,14 +102,14 @@ class ArkModelLink(BaseChatModel, BaseModel):
 
                 hinter = "the answer to the tool you called is: "
                 # priht("HERE *****")
-                # print(messages + [HumanMessage(content= hinter + tool_messages[0]['content'])]) 
+                # print(messages + [HumanMessage(content= hinter + tool_messages[0]['content'])])
                 # exit()
 
                 tool_name = tool_call.function.name
                 tool_args = tool_call.function.arguments  # this is a dict
                 tool_result = str(tool_output)
 
-# Optional: Format args nicely
+                # Optional: Format args nicely
                 arg_str = ", ".join([f"{k}={v}" for k, v in tool_args.items()])
 
                 second_prompt = (
@@ -125,20 +118,15 @@ class ArkModelLink(BaseChatModel, BaseModel):
                     f"The tool returned the result: {tool_result}.\n"
                     f"Write a clear, helpful message that uses this result to answer the user."
                 )
-                
+
                 second_response = self.make_llm_call(
-                messages + [HumanMessage(content=second_prompt)],
-                tools=None
-            )
+                    messages + [HumanMessage(content=second_prompt)], tools=None
+                )
 
-
-
-
-                
                 tool_call_obj = {
-    "id": 1234,
-    "name": tool_name,
-    "arguments": json.dumps(tool_args)  # MUST be a JSON string!
+                    "id": 1234,
+                    "name": tool_name,
+                    "arguments": json.dumps(tool_args),  # MUST be a JSON string!
                 }
                 content = second_response["message"]
         else:
@@ -146,24 +134,21 @@ class ArkModelLink(BaseChatModel, BaseModel):
             # No tool used, just regular model output
             content = second_response["message"]
 
-
         message = AIMessage(
             content=content,
             additional_kwargs={"tool_calls": [tool_call_obj]},
             usage_metadata={
                 "input_tokens": 123,
                 "output_tokens": 456,
-                "total_tokens": 579
-            }
+                "total_tokens": 579,
+            },
         )
-
 
         generation = ChatGeneration(message=message)
         return ChatResult(generations=[generation], llm_output=None)
 
     def bind_tools(self, tools: List[BaseTool]) -> "ArkModelLink":
 
-        
         return self.copy(update={"tools": self.tools + tools})
 
     @property
@@ -175,7 +160,7 @@ class ArkModelLink(BaseChatModel, BaseModel):
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         from sseclient import SSEClient
         import json
@@ -195,6 +180,7 @@ class ArkModelLink(BaseChatModel, BaseModel):
             payload["tools"] = tool_schemas
 
         import requests
+
         headers = {"Accept": "text/event-stream", "Content-Type": "application/json"}
         response = requests.post(
             url=self.base_url + "chat/completions",
@@ -217,9 +203,6 @@ class ArkModelLink(BaseChatModel, BaseModel):
             except Exception:
                 continue
 
+
 if __name__ == "__main__":
     chat_model = ArkModelLink()
-
-
-
-

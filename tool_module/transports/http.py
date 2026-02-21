@@ -147,9 +147,7 @@ class HTTPTransport(MCPTransport):
         logger.debug(f"HTTP >> POST {self.url} (notification)")
 
         try:
-            async with self.session.post(
-                self.url, json=notification, headers=headers
-            ) as response:
+            async with self.session.post(self.url, json=notification, headers=headers):
                 # Don't wait for response for notifications
                 pass
         except aiohttp.ClientError as e:

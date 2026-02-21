@@ -1,6 +1,3 @@
-
-
-
 ##TODO: figure out imports, use your own FAISS store instead of this one
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -47,11 +44,9 @@ def search_recall_memories(query: str, config: RunnableConfig) -> List[str]:
     return [document.page_content for document in documents]
 
 
-
 class State(MessagesState):
     # add memories that will be retrieved based on the conversation context
     recall_memories: List[str]
-
 
 
 # Define the prompt template for the agent
@@ -106,14 +101,12 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 
-
-
 #### FILL IN model
 
-model = ChatOpenAI(model_name="gpt-4o") ## TODO: change to locall model
-model_with_tools = model.bind_tools(tools) 
+model = ChatOpenAI(model_name="gpt-4o")  ## TODO: change to locall model
+model_with_tools = model.bind_tools(tools)
 
-tokenizer = tiktoken.encoding_for_model("gpt-4o") ## todo cange to local tokenizer
+tokenizer = tiktoken.encoding_for_model("gpt-4o")  ## todo cange to local tokenizer
 
 
 def agent(state: State) -> State:
@@ -189,7 +182,6 @@ builder.add_edge("tools", "agent")
 # Compile the graph
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
-
 
 
 def pretty_print_stream_chunk(chunk):

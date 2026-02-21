@@ -7,9 +7,6 @@ from state_module.state_registry import register_state
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-
-
-
 @register_state
 class StateUser(State):
     type = "user"

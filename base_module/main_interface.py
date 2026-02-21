@@ -8,8 +8,7 @@ from config_module.loader import config
 
 # Point to your running ArkOS agent
 client = OpenAI(
-    base_url=f"http://localhost:{config.get('app.port')}/v1",
-    api_key="not-needed"
+    base_url=f"http://localhost:{config.get('app.port')}/v1", api_key="not-needed"
 )
 
 
@@ -18,9 +17,7 @@ def chat_stream(prompt: str):
     print("ARK: ", end="", flush=True)
 
     stream = client.chat.completions.create(
-        model="ark-agent",
-        messages=[{"role": "user", "content": prompt}],
-        stream=True
+        model="ark-agent", messages=[{"role": "user", "content": prompt}], stream=True
     )
 
     full_response = ""
@@ -37,9 +34,7 @@ def chat_stream(prompt: str):
 def chat(prompt: str):
     """Send a message and get full response (no streaming)."""
     response = client.chat.completions.create(
-        model="ark-agent",
-        messages=[{"role": "user", "content": prompt}],
-        stream=False
+        model="ark-agent", messages=[{"role": "user", "content": prompt}], stream=False
     )
 
     message = response.choices[0].message.content

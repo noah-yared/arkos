@@ -3,16 +3,12 @@ OAuth authentication endpoints for per-user MCP access.
 """
 
 import os
-import json
 import secrets
-from datetime import datetime, timedelta
-from typing import Optional
-from urllib.parse import urlencode
+from datetime import datetime
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from google_auth_oauthlib.flow import Flow
-from google.oauth2.credentials import Credentials
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -73,17 +69,24 @@ async def google_login(request: Request, user_id: str):
 
 
 @router.get("/google/callback")
-async def google_callback(request: Request, code: str = None, state: str = None, error: str = None):
+async def google_callback(
+    request: Request, code: str = None, state: str = None, error: str = None
+):
     """Handle Google OAuth callback."""
     # Import here to avoid circular imports
     from tool_module.token_store import UserTokenStore
     from config_module.loader import config
 
     if error:
-        return HTMLResponse(f"<h1>Authorization Failed</h1><p>{error}</p>", status_code=400)
+        return HTMLResponse(
+            f"<h1>Authorization Failed</h1><p>{error}</p>", status_code=400
+        )
 
     if not state or state not in _oauth_states:
-        return HTMLResponse("<h1>Invalid State</h1><p>Authorization expired or invalid.</p>", status_code=400)
+        return HTMLResponse(
+            "<h1>Invalid State</h1><p>Authorization expired or invalid.</p>",
+            status_code=400,
+        )
 
     state_data = _oauth_states.pop(state)
     user_id = state_data["user_id"]
@@ -95,7 +98,9 @@ async def google_callback(request: Request, code: str = None, state: str = None,
     try:
         flow.fetch_token(code=code)
     except Exception as e:
-        return HTMLResponse(f"<h1>Token Exchange Failed</h1><p>{e}</p>", status_code=400)
+        return HTMLResponse(
+            f"<h1>Token Exchange Failed</h1><p>{e}</p>", status_code=400
+        )
 
     credentials = flow.credentials
 

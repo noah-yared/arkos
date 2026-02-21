@@ -39,15 +39,18 @@ memory = Memory(
 # Default system prompt for the agent
 
 # ArkModelLink now uses AsyncOpenAI internally
-llm = ArkModelLink(base_url=config.get("llm.base_url"), max_tokens=config.get("llm.max_tokens"))
-
+llm = ArkModelLink(
+    base_url=config.get("llm.base_url"), max_tokens=config.get("llm.max_tokens")
+)
 
 
 # Token store for per-user MCP authentication
 token_store = UserTokenStore(config.get("database.url"))
 
 mcp_config = config.get("mcp_servers")
-tool_manager = MCPToolManager(mcp_config, token_store=token_store) if mcp_config else None
+tool_manager = (
+    MCPToolManager(mcp_config, token_store=token_store) if mcp_config else None
+)
 agent = Agent(
     agent_id=config.get("memory.user_id"),
     flow=flow,
@@ -55,6 +58,7 @@ agent = Agent(
     llm=llm,
     tool_manager=tool_manager,
 )
+
 
 def format_tools_for_system_prompt(tools: dict) -> str:
     """
@@ -77,12 +81,11 @@ def format_tools_for_system_prompt(tools: dict) -> str:
 
     return "\n".join(lines)
 
+
 @app.on_event("startup")
 async def startup():
-        
-    base_system_prompt = (config.get("app.system_prompt") or "").strip()
 
-    system_prompt=None
+    base_system_prompt = (config.get("app.system_prompt") or "").strip()
 
     if tool_manager:
         await tool_manager.initialize_servers()
@@ -92,7 +95,6 @@ async def startup():
         agent.available_tools = await tool_manager.list_all_tools()
         print(f"Initialized {len(tool_manager.clients)} MCP servers")
         print(f"Available tools: {list(agent.available_tools.keys())}")
-
 
         tool_prompt = format_tools_for_system_prompt(agent.available_tools)
 
@@ -104,8 +106,6 @@ async def startup():
     else:
         agent.system_prompt = base_system_prompt
 
-            
-
 
 @app.get("/health")
 async def health_check():
@@ -116,7 +116,7 @@ async def health_check():
     try:
         response = requests.get("http://localhost:30000/v1/models", timeout=2)
         llm_status = "running" if response.status_code == 200 else "error"
-    except:
+    except Exception:
         llm_status = "not_running"
 
     return JSONResponse(
@@ -134,7 +134,11 @@ async def chat_completions(request: Request):
     stream = payload.get("stream", False)
 
     # Extract user_id from header or body for per-user tool auth
-    user_id = request.headers.get("X-User-ID") or payload.get("user") or payload.get("user_id")
+    user_id = (
+        request.headers.get("X-User-ID")
+        or payload.get("user")
+        or payload.get("user_id")
+    )
 
     context_msgs = []
     context_msgs.append(SystemMessage(content=agent.system_prompt))
@@ -152,6 +156,7 @@ async def chat_completions(request: Request):
 
     # Handle streaming
     if stream:
+
         async def generate_stream():
             chunk_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
             async for chunk in agent.step_stream(context_msgs, user_id=user_id):
@@ -160,11 +165,13 @@ async def chat_completions(request: Request):
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
                     "model": model,
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"content": chunk},
-                        "finish_reason": None,
-                    }],
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": chunk},
+                            "finish_reason": None,
+                        }
+                    ],
                 }
                 yield f"data: {json.dumps(data)}\n\n"
 
@@ -174,11 +181,13 @@ async def chat_completions(request: Request):
                 "object": "chat.completion.chunk",
                 "created": int(time.time()),
                 "model": model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {},
-                    "finish_reason": "stop",
-                }],
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop",
+                    }
+                ],
             }
             yield f"data: {json.dumps(final_data)}\n\n"
             yield "data: [DONE]\n\n"
@@ -197,11 +206,13 @@ async def chat_completions(request: Request):
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": final_msg.content},
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": final_msg.content},
+                "finish_reason": "stop",
+            }
+        ],
     }
 
     return JSONResponse(content=completion)
