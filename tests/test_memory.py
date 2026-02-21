@@ -1,11 +1,7 @@
 """Tests for memory_module/memory.py: serialize, deserialize, and ROLE/CLASS mappings."""
 
-import os
 import pytest
 from unittest.mock import MagicMock, patch
-
-# Set required env vars before importing memory module (it reads DB_URL at import time)
-os.environ.setdefault("DB_URL", "postgresql://test:test@localhost:5432/test")
 
 from model_module.ArkModelNew import (
     Message,
